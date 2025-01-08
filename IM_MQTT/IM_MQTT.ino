@@ -151,7 +151,7 @@ void loop() {
   kontrol_sprayer();
   
   ArduinoOTA.handle();
-  if (status_kipas){
+  if (status_kipas && status_sprayer){
     spreadsheet();
     readSpreadsheetData();
     delay(5000);
@@ -221,26 +221,48 @@ void kontrol_kipas(){
 
 //Task pengkondisian sprayer
 void kontrol_sprayer(){
-    if (humidity < set_humidity){
-      digitalWrite (relay_sprayer, HIGH);
+  unsigned long previousMillisSprayer = 0;  // Waktu sebelumnya
+  const unsigned long intervalSprayer = 5000;  // Interval waktu dalam ms (5 detik)
+  bool sprayerActive = false;  // Status aktif sprayer
+  // Mengecek apakah kelembaban di bawah nilai setpoint
+  if (humidity < set_humidity) {
+    if (!sprayerActive) {
+      digitalWrite(relay_sprayer, HIGH);
       kondisi_sprayer = "Menyala";
-      delay(5000);
-      digitalWrite (relay_sprayer, LOW);
+      previousMillisSprayer = millis();  // Catat waktu saat sprayer diaktifkan
+      sprayerActive = true;
+    }
+
+    // Matikan sprayer setelah 5 detik
+    if (millis() - previousMillisSprayer >= intervalSprayer) {
+      digitalWrite(relay_sprayer, LOW);
       kondisi_sprayer = "Padam";
+      sprayerActive = false;
     }
-    else if (humidity >= set_humidity) {
-      if (status_sprayer){
-        digitalWrite (relay_sprayer, HIGH);
+  }
+  // Jika kelembaban >= setpoint
+  else if (humidity >= set_humidity) {
+    if (status_sprayer) {
+      if (!sprayerActive) {
+        digitalWrite(relay_sprayer, HIGH);
         kondisi_sprayer = "Menyala";
-        delay(5000);
-        digitalWrite (relay_sprayer, LOW);
-        kondisi_sprayer = "Padam";
-      }else {
-        digitalWrite (relay_sprayer, LOW);
-        kondisi_sprayer = "Padam";
+        previousMillisSprayer = millis();
+        sprayerActive = true;
       }
+
+      if (millis() - previousMillisSprayer >= intervalSprayer) {
+        digitalWrite(relay_sprayer, LOW);
+        kondisi_sprayer = "Padam";
+        sprayerActive = false;
+      }
+    }else {
+      digitalWrite(relay_sprayer, LOW);
+      kondisi_sprayer = "Padam";
+      sprayerActive = false;
     }
+  }
 }
+
 
 //task baca cahaya
 void kontrol_lampu () {
