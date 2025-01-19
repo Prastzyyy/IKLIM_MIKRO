@@ -18,13 +18,14 @@ const char* ota_password = "123";
 String OTA_msg = "Update #2";
 
 // Google script Web_App_URL.
-String Web_App_URL = "https://script.google.com/macros/s/AKfycbz3S04CGjpaPvaXhfWPEMwXwXurooe9cCbCTPkuVKQfBuWraHT5OzGsCln2pL3PFu-r/exec";
+String Web_App_URL = "https://script.google.com/macros/s/AKfycbynTuRXx2u7v6wUIQCribduwnS6NT2rEuyMl5PokGOYDC9ymPUWh29QlGjzI1p97Ryi/exec";
 void spreadsheet();
 int dataSpreadsheet;
 String warning;
 
 //MQTT
-const char* mqtt_server = "broker.mqtt-dashboard.com";
+//const char* mqtt_server = "broker.mqtt-dashboard.com";
+const char* mqtt_server = "ee.unsoed.ac.id";
 const int mqtt_port = 1883;
 
 const char* topic_temperature = "greenhouse/sensor/temperature";
@@ -607,6 +608,8 @@ void spreadsheet(){
     Send_Data_URL += "&humidity=" + String(humidity);
     Send_Data_URL += "&kipas=" + kondisi_kipas;
     Send_Data_URL += "&sprayer=" + kondisi_sprayer;
+    Send_Data_URL += "&lampu=" + kondisi_lampu;
+    Send_Data_URL += "&lamacahaya=" + String(lama_cahaya);
     Serial.println();
     Serial.println("-------------");
     Serial.println("Send data to Google Spreadsheet...");
