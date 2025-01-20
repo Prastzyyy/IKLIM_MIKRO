@@ -76,14 +76,17 @@ float temperature, humidity;
 float set_temperature = 30;
 float set_humidity = 80;
 float set_light = 1000;
-long lama_cahaya, lama_lampu, waktu_lampu;
-#define EEPROM_SIZE 12 
+long lama_cahaya, lama_lampu, waktu_lampu, waktu_lampu1;
+#define EEPROM_SIZE 16 
 String kondisi_kipas = "Padam", kondisi_sprayer = "Padam", kondisi_lampu = "Padam";
 bool jam4, jam5_18, jam18_4, status_kipas, status_sprayer, status_lampu;
 bool modeotomatis = false;
 String statusSistem = "Manual";
 float kalibrasi_suhu = 0.67, kalibrasi_kelembaban = -13.1, kalibrasi_lux = 3.96 ;
-String msglampu1, msglampu2;
+String msglampu0, msglampu1, msglampu2;
+unsigned long previousMillis = 0;
+int set_menit = 0, set_jam = 0;
+bool timer_lampu = false;
 
 void baca_RTC();
 void setup_wifi();
@@ -135,10 +138,12 @@ void setup() {
   lama_cahaya = readLong(0); // Offset 0 
   waktu_lampu = readLong(4); // Offset 4 
   lama_lampu = readLong(8); // Offset 8 
+  waktu_lampu1 = readLong(12); // Offset 12
   // Menampilkan nilai awal dari EEPROM
   Serial.println("Nilai Lama Cahaya dari EEPROM: " + String(lama_cahaya));
   Serial.println("Nilai Lama Lampu dari EEPROM: " + String(lama_lampu));
   Serial.println("Nilai Waktu Lampu dari EEPROM: " + String(waktu_lampu));
+  Serial.println("Nilai Waktu Lampu Timer dari EEPROM: " + String(waktu_lampu1));
   /*
    if (! rtc.begin()) {
     Serial.println("RTC tidak ditemukan");
@@ -150,12 +155,21 @@ void setup() {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Set waktu sesuai waktu kompilasi
   }
   */
-  task1.attach(3, monitoring);
-  task2.attach(3, kontrol_kipas);
+  //task1.attach(3, monitoring);
+  //task2.attach(3, kontrol_kipas);
   task3.attach(3, kontrol_lampu);
 }
 
 void loop() { 
+
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= 1000) {
+    previousMillis = currentMillis;
+    monitoring();
+    kontrol_kipas();
+    kontrol_lampu();
+  }
+  
   if(!client.connected()) {
      reconnect();
   }
@@ -290,33 +304,34 @@ void kontrol_lampu () {
       lama_cahaya = 0;
       //Serial.println("reset lama_lampu menjadi 0");
       waktu_lampu = 0;
+      waktu_lampu1 = 0;
       lama_lampu = 100;
     }
     //jam 5 sampai jam 18, menghitung lama cahaya
     //if (now.hour() > setWaktu2[0] && now.hour() < setWaktu3[0]){
     if (jam5_18 == true) {
         if (lightValue >= set_light) {
-          if (lama_cahaya >= 99){
+          if (lama_cahaya >= 100){
             Serial.print("lama cahaya :"); Serial.println(lama_cahaya);
           }else {
-            lama_cahaya += 3;
+            lama_cahaya += 1;
             Serial.print("lama cahaya  :"); Serial.println(lama_cahaya);
           }
         }
         else {
            Serial.print("lama cahaya :"); Serial.println(lama_cahaya);
         }
-        lama_lampu = (100 - lama_cahaya);
-        Serial.print("lama lampu : "); Serial.println(lama_lampu);
+        
     }
   if(modeotomatis){
+    lama_lampu = (100 - lama_cahaya);
     //jam 18 sampai jam 3 , menyalakan lampu
     //if (now.hour() > setWaktu3[0] && now.hour() < setWaktu1[0]){
     if (jam18_4 == true) {
-      if (waktu_lampu >= 0 && waktu_lampu < lama_lampu) {
+      if (waktu_lampu < lama_lampu) {
         digitalWrite (relay_lampu, HIGH);
         kondisi_lampu = "Menyala";
-        waktu_lampu += 3;
+        waktu_lampu += 1;
         Serial.print("lampu menyala : "); Serial.println(waktu_lampu);
       }
       else if (waktu_lampu >= lama_lampu){
@@ -329,16 +344,56 @@ void kontrol_lampu () {
           kondisi_lampu = "Padam";
         }
       }
+      int jam3 = waktu_lampu / 3600;          // 1 jam = 3600 detik
+      int menit3 = (waktu_lampu % 3600) / 60; // Sisa detik dikonversi ke menit
+      int detik3 = waktu_lampu % 60;          // Sisa detik setelah menit
+      msglampu2 = "Lampu sudah menyala selama : " + String(jam3) + " jam " + String(menit3) + " menit " + String(detik3) + " detik";
+    }
+  }else{  
+    lama_lampu = (set_jam * 3600) + (set_menit * 60);
+    if(timer_lampu){
+      if(waktu_lampu1 < lama_lampu) {
+        digitalWrite (relay_lampu, HIGH);
+        kondisi_lampu = "Menyala";
+        waktu_lampu1 += 1;
+        Serial.print("lampu menyala : "); Serial.println(waktu_lampu1);
+      }
+      else if (waktu_lampu1 >= lama_lampu){
+        if (status_lampu){
+          digitalWrite (relay_lampu, HIGH);
+          kondisi_lampu = "Menyala";
+        }else {
+          Serial.println("lampu padam");
+          digitalWrite (relay_lampu, LOW);
+          kondisi_lampu = "Padam";
+        }
+      }
+      int jam4 = waktu_lampu1 / 3600;          // 1 jam = 3600 detik
+      int menit4 = (waktu_lampu1 % 3600) / 60; // Sisa detik dikonversi ke menit
+      int detik4 = waktu_lampu1 % 60;          // Sisa detik setelah menit
+      msglampu2 = "Lampu sudah menyala selama : " + String(jam4) + " jam " + String(menit4) + " menit " + String(detik4) + " detik";
     }
   }
-  msglampu1 = "=> " + String(lama_lampu) + " detik";
-  msglampu2 = "Lampu sudah menyala selama : " + String(waktu_lampu) + " detik";
+  //Konversi ke jam, menit, dan detik
+  int jam1 = lama_cahaya / 3600;          // 1 jam = 3600 detik
+  int menit1 = (lama_cahaya % 3600) / 60; // Sisa detik dikonversi ke menit
+  int detik1 = lama_cahaya % 60;          // Sisa detik setelah menit
+
+  int jam2 = lama_lampu / 3600;          // 1 jam = 3600 detik
+  int menit2 = (lama_lampu % 3600) / 60; // Sisa detik dikonversi ke menit
+  int detik2 = lama_lampu % 60;          // Sisa detik setelah menit
+
+  msglampu0 = "=> " + String(jam1) + " jam " + String(menit1) + " menit " + String(detik1) + " detik";
+  msglampu1 = "=> " + String(jam2) + " jam " + String(menit2) + " menit " + String(detik2) + " detik";
+  
+  client.publish("greenhouse/info/lamacahaya", msglampu0.c_str());
   client.publish("greenhouse/info/lamalampu", msglampu1.c_str());
   client.publish("greenhouse/info/waktulampu", msglampu2.c_str());
     // Simpan nilai terbaru ke EEPROM
     writeLong(0, lama_cahaya); // Simpan di offset 0
     writeLong(4, waktu_lampu); // Simpan di offset 4
     writeLong(8, lama_lampu); // Simpan di offset 8
+    writeLong(12, waktu_lampu1); // Simpan di offset 12
     EEPROM.commit(); // Pastikan data tersimpan ke memori
 }
 
@@ -358,6 +413,8 @@ void writeLong(int address, long value) {
   }
 }
 
+
+
 void callback(char *topic, byte *payload, unsigned int length) {
   Serial.print("Receive Topic: ");
   Serial.println(topic);
@@ -368,6 +425,27 @@ void callback(char *topic, byte *payload, unsigned int length) {
   msg[length] = '\0';  
   Serial.println(msg);
 
+  // Set Menit
+  if (!strcmp(topic, "greenhouse/set/setmenit")) {
+    set_menit = atoi(msg); 
+    Serial.print("Set menit menjadi : ");
+    Serial.println(set_menit);
+  }
+  // Set Jam
+  if (!strcmp(topic, "greenhouse/set/setjam")) {
+    set_jam = atoi(msg); 
+    Serial.print("Set jam menjadi : ");
+    Serial.println(set_jam);
+  }
+  // Saklar timer Lampu
+  if (!strcmp(topic, "greenhouse/kontrol/timerlampu")) {
+    if (!strncmp(msg, "on", length)) {
+      timer_lampu = true;
+    } else if (!strncmp(msg, "off", length)) {
+      timer_lampu = false;
+    }
+  }
+  //================================================
   // Saklar Mode Otomatis 
   if (!strcmp(topic, "greenhouse/kontrol/modeotomatis")) {
     if (!strncmp(msg, "on", length)) {
@@ -487,10 +565,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
       lama_cahaya = 0;
       Serial.println("reset lama_lampu menjadi 0");
       waktu_lampu = 0;
+      waktu_lampu1 = 0;
       lama_lampu = 100;
-    } else if (!strncmp(msg, "off1", length)) {
       jam4 = false;
-      Serial.println("jam 4 off");
     }
   }
 
@@ -534,6 +611,9 @@ void reconnect() {
       client.subscribe(topic_set_temperature);
       client.subscribe(topic_set_humidity);
       client.subscribe(topic_set_light);
+      client.subscribe("greenhouse/set/setmenit");
+      client.subscribe("greenhouse/set/setjam");
+      client.subscribe("greenhouse/kontrol/timerlampu");
       client.subscribe("greenhouse/kontrol/modeotomatis");
       client.subscribe("greenhouse/kontrol/ambildata");
       client.subscribe("greenhouse/kontrol/kalibrasisuhu");
